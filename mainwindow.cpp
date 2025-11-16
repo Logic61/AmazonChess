@@ -11,7 +11,7 @@ MainWindow::MainWindow(QWidget *parent)
     : QMainWindow(parent)
     //, ui(new Ui::MainWindow)
 {
-    const int height_of_button = 70;
+    const int height_of_button = 60;
     //ui->setupUi(this);
     //放界面的地方
     resize(1000,720);
@@ -56,24 +56,29 @@ MainWindow::MainWindow(QWidget *parent)
     QPushButton *resetbtn = new QPushButton("开始新对局");
     QPushButton *btn2 = new QPushButton("存储当前棋盘");
     QPushButton *btn3 = new QPushButton("读取对局");
-    QPushButton *btn4 = new QPushButton("悔棋");
+    QPushButton *undobtn = new QPushButton("悔棋");
     QPushButton *btn5 = new QPushButton("认输");
+    QPushButton *modebtn = new QPushButton("模式选择");
+    boxLayout->addWidget(modebtn);
     boxLayout->addWidget(resetbtn);
     boxLayout->addWidget(btn2);
     boxLayout->addWidget(btn3);
-    boxLayout->addWidget(btn4);
+    boxLayout->addWidget(undobtn);
     boxLayout->addWidget(btn5);
     //按钮高度
     resetbtn->setFixedHeight((height_of_button));
     btn2->setFixedHeight((height_of_button));
     btn3->setFixedHeight((height_of_button));
-    btn4->setFixedHeight((height_of_button));
+    undobtn->setFixedHeight((height_of_button));
     btn5->setFixedHeight((height_of_button));
+    modebtn->setFixedHeight((height_of_button));
 
     rightPanel->addWidget(box);
 
     //按钮实现
     connect(resetbtn, &QPushButton::clicked, board, &ChessBoard::reset);
+    connect(modebtn, &QPushButton::clicked, board, &ChessBoard::modeSet);
+    connect(undobtn, &QPushButton::clicked, board, &ChessBoard::undomove);
 }
 
 MainWindow::~MainWindow()

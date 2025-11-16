@@ -16,7 +16,9 @@ public:
         emit turnChanged(turn);    // 发信号告诉 MainWindow
         update();
     }
-
+    void showGameOverDialog(QWidget *parent, const QString &winnerText, std::function<void()> onRestart);
+    void modeSet();
+    void undomove();
     void reset();
 
 private:

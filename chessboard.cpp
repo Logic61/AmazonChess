@@ -1,19 +1,28 @@
 #include "chessboard.h"
+#include "gamedialog.h"
 #include <QWidget>
 #include <QPainter>
 //#include <QGraphicsEffect>
 #include <QMouseEvent>
 #include <cmath>
 //#include <algorithm>
+#include <QMessageBox>
+#include <QPushButton>
+#include <QApplication>
+#include <QLabel>
+#include <QVBoxLayout>
+#include <QHBoxLayout>
+#include <vector>
 
 const int size_of_board = 10;
+std::vector<std::vector<std::vector<int> > > boardHistory{};
+std::vector<int > playerHistory;
 
 ChessBoard::ChessBoard(QWidget *parent)
     : QWidget{parent}
 {
     //设置大小
     setMinimumSize(400,400);
-
 
     //棋子初始化
     for(int i = 0;i < size_of_board; ++i)
@@ -29,6 +38,12 @@ ChessBoard::ChessBoard(QWidget *parent)
     board[6][9] = 1;
     board[9][3] = 1;
     board[9][6] = 1;
+
+    std::vector<std::vector<int>> temp(size_of_board, std::vector<int>(size_of_board, 0));
+    for(int i = 0;i < size_of_board; ++i)
+        for(int j = 0;j < size_of_board; ++j)
+            temp[i][j] = board[i][j];
+    boardHistory.push_back(temp);
 }
 
 //画画这一块
@@ -176,6 +191,18 @@ void ChessBoard::mousePressEvent(QMouseEvent *event) {
             selectedCol = j;
 
             toShoot = 1;
+
+            /*
+            //存盘
+            std::vector<std::vector<int>> temp(10, std::vector<int>(10,0));
+            for(int i=0;i<10;i++)
+                for(int j=0;j<10;j++)
+                    temp[i][j] = board[i][j];
+            boardHistory.push_back(temp);
+            playerHistory.push_back(turn);
+            */
+
+            win();
         }
         else {
             selectedRow = -1;
@@ -192,6 +219,16 @@ void ChessBoard::mousePressEvent(QMouseEvent *event) {
 
             selectedRow = -1;
             selectedCol = -1;
+
+            //存盘
+            std::vector<std::vector<int>> temp(10, std::vector<int>(10,0));
+            for(int i=0;i<10;i++)
+                for(int j=0;j<10;j++)
+                    temp[i][j] = board[i][j];
+            boardHistory.push_back(temp);
+            playerHistory.push_back(turn);
+
+            win();
 
             nextTurn();
 
@@ -252,6 +289,9 @@ void ChessBoard::reset() {
     selectedRow = -1;
     selectedCol = -1;
 
+    boardHistory.clear();
+    playerHistory.clear();
+
     toShoot = 0;
 
     emit turnChanged(turn);
@@ -261,5 +301,228 @@ void ChessBoard::reset() {
 
 //判断输赢
 void ChessBoard::win() {
+    //位移
+    int dx[] = {0, 0, 1, 1, 1, -1, -1, -1};
+    int dy[] = {1, -1, 0, -1, 1, 0, -1, 1};
 
+    //看看黑方
+    int flag = 0; //动？
+    for(int i = 0;i < size_of_board; ++i) {
+        for(int j = 0;j < size_of_board; ++j) {
+            if(flag) break;
+            if(board[i][j] == 2) {
+                for(int k = 0;k < 8; ++k) {
+                    int x = i + dx[k];
+                    int y = j + dy[k];
+
+                    if(x >= 0 && y >= 0 && x < size_of_board && y < size_of_board) {
+                        if(board[x][y] == 0) {
+                            flag = 1;
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    if(flag == 0) {
+        update();
+        showGameOverDialog(this, "白方获胜！", [this]{ reset(); });
+        /*
+        // 创建弹窗
+        QMessageBox msgBox;
+        msgBox.setWindowTitle("游戏结束");
+
+        // 修改整体字体
+        QFont font;
+        font.setPointSize(16);       // 主字体大小
+        msgBox.setFont(font);
+
+        // 设置文本（多行更美观）
+        msgBox.setText("<p align='center'> <br> 白方获胜！<br> <br> 下一步？</p>");
+
+        // 取到内部的 QLabel，加大字体让弹窗变大
+        QLabel *label = msgBox.findChild<QLabel *>();
+        if (label) {
+            QFont lf = label->font();
+            lf.setPointSize(16);     // 提示语句更大
+            label->setFont(lf);
+
+            label->setAlignment(Qt::AlignCenter);
+        }
+
+        // 自定义按钮
+        QPushButton *btn1 = new QPushButton("再开一把");
+        QPushButton *btn2 = new QPushButton("不玩了，退出");
+
+        // 让按钮变宽变高
+        btn1->setMinimumHeight(36);
+        btn2->setMinimumHeight(36);
+
+        QFont bf;
+        bf.setPointSize(13);
+        btn1->setFont(bf);
+        btn2->setFont(bf);
+
+        // 放进 msgBox
+        msgBox.addButton(btn1, QMessageBox::AcceptRole);
+        msgBox.addButton(btn2, QMessageBox::RejectRole);
+
+        // 显示
+        msgBox.exec();
+
+        // 判断结果
+        if (msgBox.clickedButton() == btn1) {
+            reset();
+        } else if (msgBox.clickedButton() == btn2) {
+            qApp->quit();
+        }
+        */
+
+        return;
+
+    }
+
+    //看看白方
+    flag = 0; //动？
+    for(int i = 0;i < size_of_board; ++i) {
+        for(int j = 0;j < size_of_board; ++j) {
+            if(flag) break;
+            if(board[i][j] == 1) {
+                for(int k = 0;k < 8; ++k) {
+                    int x = i + dx[k];
+                    int y = j + dy[k];
+
+                    if(x >= 0 && y >= 0 && x < size_of_board && y < size_of_board) {
+                        if(board[x][y] == 0) {
+                            flag = 1;
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    if(flag == 0) {
+        update();
+
+        showGameOverDialog(this, "黑方获胜！", [this](){ reset(); }); {
+            reset();  // 你的重置棋盘函数
+        };
+
+        return;
+    }
+}
+
+//跳结束弹窗
+void ChessBoard::showGameOverDialog(QWidget *parent, const QString &winnerText, std::function<void()> onRestart) {
+    QDialog dlg(parent);
+    dlg.setWindowTitle("游戏结束");
+    dlg.setModal(true);
+    dlg.resize(400, 250);
+    dlg.setStyleSheet("background-color: #0b3d0b; border-radius: 10px;");
+
+    QVBoxLayout *layout = new QVBoxLayout(&dlg);
+
+    // 文本
+    QLabel *label = new QLabel(winnerText + "<br>下一步？");
+    label->setAlignment(Qt::AlignCenter);
+    QFont f; f.setPointSize(18); f.setBold(true);
+    label->setFont(f);
+    label->setStyleSheet("color: white;");
+    layout->addWidget(label);
+
+    // 按钮布局
+    QHBoxLayout *btnLayout = new QHBoxLayout();
+    QPushButton *btnRestart = new QPushButton("再开一把");
+    QPushButton *btnQuit    = new QPushButton("不玩了，退出");
+
+    QFont bf; bf.setPointSize(14);
+    btnRestart->setFont(bf);
+    btnQuit->setFont(bf);
+    btnRestart->setMinimumHeight(36);
+    btnQuit->setMinimumHeight(36);
+
+    // 区分颜色
+    btnRestart->setStyleSheet(
+        "QPushButton {background-color: #4CAF50; color: white; border-radius: 5px; padding: 10px 20px;}"
+        "QPushButton:hover {background-color: #45a049;}"
+        );
+
+    btnQuit->setStyleSheet(
+        "QPushButton {background-color: #f44336; color: white; border-radius: 5px; padding: 10px 20px;}"
+        "QPushButton:hover {background-color: #da190b;}"
+        );
+
+    btnLayout->addWidget(btnRestart);
+    btnLayout->addWidget(btnQuit);
+    layout->addLayout(btnLayout);
+
+    // 信号
+    QObject::connect(btnRestart, &QPushButton::clicked, [&dlg, onRestart]() {
+        dlg.accept();
+        onRestart();
+    });
+
+    QObject::connect(btnQuit, &QPushButton::clicked, [&dlg]() {
+        dlg.reject();
+        qApp->quit();
+    });
+
+    dlg.exec();
+}
+
+void ChessBoard::modeSet() {
+
+}
+
+void ChessBoard::undomove() {
+
+    if(boardHistory.size() == 1) {
+        QDialog dlg(this);
+        dlg.setWindowTitle("提示");
+        dlg.setModal(true);
+        dlg.resize(400, 250);
+        dlg.setStyleSheet("background-color: #0b3d0b; border-radius: 10px;");
+
+        QVBoxLayout *layout = new QVBoxLayout(&dlg);
+
+        // 文本
+        QLabel *label = new QLabel("您还没下过棋呢");
+        label->setAlignment(Qt::AlignCenter);
+        QFont f; f.setPointSize(18); f.setBold(true);
+        label->setFont(f);
+        label->setStyleSheet("color: white;");
+        layout->addWidget(label);
+
+        dlg.exec();
+        return;
+    }
+
+    boardHistory.pop_back();
+    playerHistory.pop_back();
+    std::vector<std::vector<int> > temp = boardHistory.back();
+    int lastTurn = playerHistory.back();
+
+
+    for(int i = 0;i < size_of_board; ++i) {
+        for(int j = 0;j < size_of_board; ++j) {
+            if(board[i][j] == 1 && temp[i][j] != 1)
+                turn = 1;
+            if(board[i][j] == 2 && temp[i][j] != 2)
+                turn = 2;
+        }
+    }
+
+    for(int i = 0;i < size_of_board; i++)
+        for(int j = 0;j < size_of_board; j++)
+            board[i][j] = temp[i][j];
+
+    selectedCol = -1;
+    selectedRow = -1;
+    toShoot = 0;
+
+    emit turnChanged(turn);
+
+    update();
 }
