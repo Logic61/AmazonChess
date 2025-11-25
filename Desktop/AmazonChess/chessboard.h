@@ -42,6 +42,12 @@ public:
     int quickHeuristic(const AIMove &m, int player);
     int alphaBeta(int depth, int alpha, int beta, int player);
     int quickEvaluate(int player);
+    int getDynamicDepth();
+    int calculateTerritory(int x,int y,int player);
+    int positionValue(int x, int y);
+    int distanceToNearestAlly(int x, int y, int player);
+    int advancedEvaluate(int player);
+    int getAggressiveness(int x, int y, int opponent);
     /*
     // Zobrist & TT
     void initZobrist();

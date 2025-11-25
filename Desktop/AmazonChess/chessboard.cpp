@@ -16,6 +16,7 @@
 #include <QFile>
 #include <QTimer>
 #include <math.h>
+#include <queue>
 
     const int size_of_board = 10;
 std::vector<std::vector<std::vector<int> > > boardHistory{};
@@ -220,7 +221,7 @@ void ChessBoard::paintEvent(QPaintEvent *event)
     }
 
 }
-
+int undo_ok = 1;
 //鼠标活动这一块
 void ChessBoard::mousePressEvent(QMouseEvent *event) {
     int cellWidth = width() / size_of_board;
@@ -315,12 +316,14 @@ void ChessBoard::mousePressEvent(QMouseEvent *event) {
             update();
 
             if(gameMode == 1 && turn == aiType) { // 假设AI是黑棋
+                undo_ok = 0;
                 QTimer::singleShot(1500, this, &ChessBoard::aiMove);
                 win();  // 检查输赢
             }
         }
     }
 }
+
 
 //移动合法判断
 bool ChessBoard::moveAvailable(int x_now, int y_now, int x_to, int y_to) const {
@@ -629,6 +632,27 @@ void ChessBoard::undomove() {
         return;
     }
 
+    if(gameMode == 1) {
+        QDialog dlg(this);
+        dlg.setWindowTitle("提示");
+        dlg.setModal(true);
+        dlg.resize(400, 250);
+        dlg.setStyleSheet("background-color: #0b3d0b; border-radius: 10px;");
+
+        QVBoxLayout *layout = new QVBoxLayout(&dlg);
+
+        // 文本
+        QLabel *label = new QLabel("人机模式不可悔棋");
+        label->setAlignment(Qt::AlignCenter);
+        QFont f; f.setPointSize(18); f.setBold(true);
+        label->setFont(f);
+        label->setStyleSheet("color: white;");
+        layout->addWidget(label);
+
+        dlg.exec();
+        return;
+    }
+
     if(boardHistory.size() == 1) {
         QDialog dlg(this);
         dlg.setWindowTitle("提示");
@@ -679,10 +703,29 @@ void ChessBoard::undomove() {
     lastMoveX = -1;
     lastMoveY = -1;
 
-    if(gameMode == 1 && turn == aiType) { // 假设AI是黑棋
-        emit turnChanged(turn);
-        undomove();
-    }
+    /*if(gameMode == 1 && turn == aiType) {
+        boardHistory.pop_back();
+        playerHistory.pop_back();
+        std::vector<std::vector<int> > temp = boardHistory.back();
+        if(boardHistory.size() == 1) {
+            reset();
+            return;
+        }
+
+        for(int i = 0;i < size_of_board; ++i) {
+            for(int j = 0;j < size_of_board; ++j) {
+                if(board[i][j] == 1 && temp[i][j] != 1)
+                    turn = 1;
+                if(board[i][j] == 2 && temp[i][j] != 2)
+                    turn = 2;
+            }
+        }
+
+        for(int i = 0;i < size_of_board; i++)
+            for(int j = 0;j < size_of_board; j++)
+                board[i][j] = temp[i][j];
+
+    }*/
 
     emit turnChanged(turn);
 
@@ -855,73 +898,29 @@ void ChessBoard::readGame(const QString &filename)
 
     dlg.exec();
 }
-void ChessBoard::aiMove() {
-    struct Move {
-        int fromX, fromY, toX, toY;
-        int score;
-    };
-    std::vector<Move> moves;
 
-    // 生成所有合法走法
-    for(int i = 0;i < size_of_board; ++i) {
-        for(int j = 0;j < size_of_board; ++j) {
-            if(board[i][j] == turn) { // AI的棋子
-                for(int x = 0;x < size_of_board;x++) {
-                    for(int y = 0;y < size_of_board;y++) {
-                        if(moveAvailable(i,j,x,y)) {
-                            // 简单评分：目标位置周围空格数
-                            int score = 0;
-                            for(int dx = -1; dx <= 1; ++dx) {
-                                for(int dy = -1; dy <= 1; ++dy) {
-                                    int nx = x + dx, ny = y + dy;
-                                    if(nx>=0 && nx<size_of_board && ny>=0 && ny<size_of_board && board[nx][ny]==0)
-                                        score++;
-                                }
-                            }
-                            moves.push_back({i,j,x,y,score});
-                        }
-                    }
-                }
-            }
-        }
+void ChessBoard::aiMove() {
+    int searchDepth = ChessBoard::getDynamicDepth();
+
+    AIMove aiMove = findBestMove(searchDepth);
+
+    if(turn != aiType) {
+        qDebug() << "错误: 现在不是AI的回合!";
+        return;
     }
 
-    if(moves.empty()) return;
+    // 执行落子
+    board[aiMove.qx][aiMove.qy] = 0;
+    board[aiMove.mx][aiMove.my] = aiType;
 
-    // 找到评分最高的走法
-    int maxScore = INT_MIN;
-    for(auto &m : moves) if(m.score > maxScore) maxScore = m.score;
-
-    std::vector<Move> bestMoves;
-    for(auto &m : moves) if(m.score == maxScore) bestMoves.push_back(m);
-
-    // 随机选一个最高分走法
-    auto &move = bestMoves[rand() % bestMoves.size()];
-    int fromX = move.fromX, fromY = move.fromY, toX = move.toX, toY = move.toY;
-
-    // 执行移动
-    board[toX][toY] = board[fromX][fromY];
-    board[fromX][fromY] = 0;
-    lastMoveX = toX;
-    lastMoveY = toY;
+    lastMoveX = aiMove.mx;
+    lastMoveY = aiMove.my;
     update();
 
-    // 射箭（随机）
     QTimer::singleShot(500, this, [=](){
-        std::vector<std::pair<int,int>> arrows;
-        for(int x = 0;x < size_of_board;x++) {
-            for(int y = 0;y < size_of_board;y++) {
-                if(moveAvailable(toX,toY,x,y)) {
-                    arrows.push_back({x,y});
-                }
-            }
-        }
-        if(!arrows.empty()) {
-            auto [arrowX, arrowY] = arrows[rand() % arrows.size()];
-            board[arrowX][arrowY] = 3;
-            lastArrowX = arrowX;
-            lastArrowY = arrowY;
-        }
+        board[aiMove.ax][aiMove.ay] = 3;
+        lastArrowX = aiMove.ax;
+        lastArrowY = aiMove.ay;
 
         // 存盘
         std::vector<std::vector<int>> temp(size_of_board, std::vector<int>(size_of_board,0));
@@ -931,6 +930,8 @@ void ChessBoard::aiMove() {
         boardHistory.push_back(temp);
         playerHistory.push_back(turn);
 
+        win();
+        undo_ok = 1;
         // 更新界面 & 轮到玩家
         nextTurn();
         update();
@@ -1031,7 +1032,7 @@ std::vector<ChessBoard::AIMove> ChessBoard::generateAllMoves(int player) {
                     board[i][j] = 0;
                     board[x][y] = player;
 
-                    //箭
+                    //箭 - 从移动后的位置发射
                     for(int ad = 0; ad < 8; ++ad) {
                         int ax = x, ay = y;
 
@@ -1042,25 +1043,72 @@ std::vector<ChessBoard::AIMove> ChessBoard::generateAllMoves(int player) {
                             if(ax < 0 || ax >= size_of_board || ay < 0 || ay >= size_of_board) break;
                             if(board[ax][ay] != 0) break;
 
-                            // 箭剪枝：只生成能封锁对手或邻近封闭格
-                            if(localMobility(ax, ay) <= 2 || arrowBlock(ax, ay, opponent) > 0) {
-                                AIMove m = {i,j,x,y,ax,ay,0};
-                                m.score = wLocalMobility * localMobility(m.mx, m.my) + wArrowBlock * arrowBlock(m.ax, m.ay, opponent) + wCenterControl * centerControl(m.mx, m.my);
-                                moves.push_back(m);
-                            }
+                            AIMove m = {i,j,x,y,ax,ay,0};
+                            m.score = wLocalMobility * localMobility(m.mx, m.my) +
+                                      wArrowBlock * arrowBlock(m.ax, m.ay, opponent) +
+                                      wCenterControl * centerControl(m.mx, m.my);
+                            moves.push_back(m);
                         }
                     }
 
+                    //恢复棋盘
                     board[i][j] = player;
                     board[x][y] = 0;
                 }
             }
         }
     }
+
+    for(auto &m : moves) {
+        int score = 0;
+
+        // 1. 移动后的移动性
+        score += 100 * localMobility(m.mx, m.my);
+
+        // 2. 箭的封锁能力
+        score += 50 * arrowBlock(m.ax, m.ay, 3 - player);
+
+        // 3. 位置价值
+        score += 20 * positionValue(m.mx, m.my);
+
+        // 4. 靠近对手（进攻性）
+        score += 10 * getAggressiveness(m.mx, m.my, 3 - player);
+
+        // 5. 历史启发（History Heuristic）
+        score += history_table[m.qx][m.qy][m.mx][m.my];
+
+        m.score = score;
+    }
+
+    // 降序排序
     std::sort(moves.begin(), moves.end(),
-              [](auto &a, auto &b){ return a.score > b.score; });
+              [](const AIMove &a, const AIMove &b) {
+                  return a.score > b.score;
+              });
+
+    // 只保留前N个最佳走法（减少搜索量）
+    if(moves.size() > 40) {
+        moves.resize(40);
+    }
 
     return moves;
+}
+
+int ChessBoard::getAggressiveness(int x, int y, int opponent) {
+    int minDist = 999;
+
+    // 找到最近的对手棋子
+    for(int i = 0; i < size_of_board; i++) {
+        for(int j = 0; j < size_of_board; j++) {
+            if(board[i][j] == opponent) {
+                int dist = std::max(abs(i - x), abs(j - y)); // 切比雪夫距离
+                minDist = std::min(minDist, dist);
+            }
+        }
+    }
+
+    // 距离越近，分数越高
+    return (size_of_board - minDist);
 }
 
 int ChessBoard::localMobility(int x, int y) {
@@ -1089,6 +1137,8 @@ int ChessBoard::arrowBlock(int ax, int ay, int opponent) {
     const int dx[8] = {-1,-1,-1,0,0,1,1,1};
     const int dy[8] = {-1,0,1,-1,1,-1,0,1};
 
+    int blockScore = 0;
+
     for(int d = 0; d < 8; ++d) {
         int nx = ax + dx[d];
         int ny = ay + dy[d];
@@ -1097,10 +1147,15 @@ int ChessBoard::arrowBlock(int ax, int ay, int opponent) {
             ny >= 0 && ny < size_of_board &&
             board[nx][ny] == opponent)
         {
-            return 3; // 封锁对方
+            // 检查这个对手棋子是否被封锁（所有移动方向都被阻塞）
+            if(localMobility(nx, ny) == 0) {
+                blockScore += 3; // 完全封锁
+            } else {
+                blockScore += 1; // 部分封锁
+            }
         }
     }
-    return 0;
+    return blockScore;
 }
 
 int ChessBoard::centerControl(int x, int y) {
@@ -1111,73 +1166,335 @@ int ChessBoard::centerControl(int x, int y) {
     return -(abs(x - cx) + abs(y - cy));
 }
 
+int ChessBoard::quickHeuristic(const AIMove &m, int player) {
+    int score = 0;
+    score += wLocalMobility * localMobility(m.mx, m.my);
+    score += wArrowBlock * arrowBlock(m.ax, m.ay, (player==1?2:1));
+    score += wCenterControl * centerControl(m.mx, m.my);
+    return score;
+}
+
+int ChessBoard::quickEvaluate(int player) {
+    int score = 0;
+    int opponent = 3 - player;  // ✅ 使用传入的 player
+
+    for(int i = 0; i < size_of_board; i++) {
+        for(int j = 0; j < size_of_board; j++) {
+            if(board[i][j] == player) {
+                score += localMobility(i, j);
+                score += (int)(wCenterControl * centerControl(i, j));
+            } else if(board[i][j] == opponent) {
+                score -= localMobility(i, j);
+                score -= (int)(wCenterControl * centerControl(i, j));
+            }
+        }
+    }
+
+    return score;
+}
+
+ChessBoard::AIMove ChessBoard::findBestMove(int depth) {
+    int bestScore = std::numeric_limits<int>::min();
+    AIMove bestMove = {-1, -1, -1, -1, -1, -1, 0};
+
+    auto moves = generateAllMoves(aiType);
+    if(moves.empty()) {
+        return bestMove;
+    }
+
+    for(auto &m : moves) {
+        // 保存原始状态
+        int oldQx = board[m.qx][m.qy];
+        int oldMx = board[m.mx][m.my];
+        int oldAx = board[m.ax][m.ay];
+
+        // 执行移动
+        board[m.qx][m.qy] = 0;
+        board[m.mx][m.my] = aiType;
+        board[m.ax][m.ay] = 3;
+
+        int score = alphaBeta(depth - 1,
+                              std::numeric_limits<int>::min(),
+                              std::numeric_limits<int>::max(),
+                              3 - aiType);
+
+        // ✅ 正确恢复
+        board[m.qx][m.qy] = oldQx;
+        board[m.mx][m.my] = oldMx;
+        board[m.ax][m.ay] = oldAx;
+
+        if(score > bestScore) {
+            bestScore = score;
+            bestMove = m;
+        }
+    }
+
+    return bestMove;
+}
+
+int nodeCount = 0;
+const int MAX_NODES = 10000000;
+
 int ChessBoard::alphaBeta(int depth, int alpha, int beta, int player) {
+    if(++nodeCount > MAX_NODES) {
+        qDebug() << "警告：搜索节点超限！";
+        //return quickEvaluate(player);
+    }
 
     if(depth == 0 || isGameOver(player)) {
         return quickEvaluate(player);
     }
 
-    //生成走法
     auto moves = generateAllMoves(player);
+    if(moves.empty()) {
+        return quickEvaluate(player);
+    }
 
-    int opponent = (player == 1 ? 2 : 1);
+    int opponent = 3 - player;
 
-    //Max层
     if(player == aiType) {
-        int maxEval = -std::numeric_limits<int>::infinity();
+        int maxEval = std::numeric_limits<int>::min();
         for(auto &m : moves) {
-            //移动
+            // 保存原始状态
+            int oldQx = board[m.qx][m.qy];
+            int oldMx = board[m.mx][m.my];
+            int oldAx = board[m.ax][m.ay];
+
+            // 执行移动
             board[m.qx][m.qy] = 0;
             board[m.mx][m.my] = player;
             board[m.ax][m.ay] = 3;
 
             int eval = alphaBeta(depth - 1, alpha, beta, opponent);
 
-            //撤回
-            board[m.qx][m.qy] = player;
-            board[m.mx][m.my] = 0;
-            board[m.ax][m.ay] = 0;
+            // 恢复
+            board[m.qx][m.qy] = oldQx;
+            board[m.mx][m.my] = oldMx;
+            board[m.ax][m.ay] = oldAx;
 
-            maxEval = std::max(maxEval,eval);
+            maxEval = std::max(maxEval, eval);
             alpha = std::max(alpha, eval);
-
-            if(beta <= alpha) break;
+            // 产生了剪枝，记录下来
+            if(beta <= alpha) {
+                history_table[m.qx][m.qy][m.mx][m.my] += depth * depth;
+                break;
+            }
         }
         return maxEval;
     }
-    //Min层
     else {
-        int minEval = std::numeric_limits<int>::infinity();
+        int minEval = std::numeric_limits<int>::max();
         for(auto &m : moves) {
-            //移动
+            // 保存原始状态
+            int oldQx = board[m.qx][m.qy];
+            int oldMx = board[m.mx][m.my];
+            int oldAx = board[m.ax][m.ay];
+
+            // 执行移动
             board[m.qx][m.qy] = 0;
             board[m.mx][m.my] = player;
             board[m.ax][m.ay] = 3;
 
             int eval = alphaBeta(depth - 1, alpha, beta, opponent);
 
-            //撤回
-            board[m.qx][m.qy] = player;
-            board[m.mx][m.my] = 0;
-            board[m.ax][m.ay] = 0;
+            // ✅ 正确恢复
+            board[m.qx][m.qy] = oldQx;
+            board[m.mx][m.my] = oldMx;
+            board[m.ax][m.ay] = oldAx;
 
-            minEval = std::min(minEval,eval);
+            minEval = std::min(minEval, eval);
             beta = std::min(beta, eval);
-
             if(beta <= alpha) break;
         }
         return minEval;
     }
 }
 
-int ChessBoard::quickEvaluate(int player) {
-    int score = 0;
-    for(int i=0;i<size_of_board;i++)
-        for(int j=0;j<size_of_board;j++)
-            if(board[i][j] == aiType)
-                score += quickHeuristic({i,j,0,0,0,0}, aiType);
-            else if(board[i][j] == 3 - aiType)
-                score -= quickHeuristic({i,j,0,0,0,0}, 3 - aiType);
-    return score;
+bool ChessBoard::isGameOver(int player) {
+    //位移
+    int dx[] = {0, 0, 1, 1, 1, -1, -1, -1};
+    int dy[] = {1, -1, 0, -1, 1, 0, -1, 1};
+
+    //看看黑方
+    int flag = 0; //动？
+    for(int i = 0;i < size_of_board; ++i) {
+        for(int j = 0;j < size_of_board; ++j) {
+            if(flag) break;
+            if(board[i][j] == 2) {
+                for(int k = 0;k < 8; ++k) {
+                    int x = i + dx[k];
+                    int y = j + dy[k];
+
+                    if(x >= 0 && y >= 0 && x < size_of_board && y < size_of_board) {
+                        if(board[x][y] == 0) {
+                            flag = 1;
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    if(flag == 0) {
+        return 1;
+    }
+
+    //看看白方
+    flag = 0; //动？
+    for(int i = 0;i < size_of_board; ++i) {
+        for(int j = 0;j < size_of_board; ++j) {
+            if(flag) break;
+            if(board[i][j] == 1) {
+                for(int k = 0;k < 8; ++k) {
+                    int x = i + dx[k];
+                    int y = j + dy[k];
+
+                    if(x >= 0 && y >= 0 && x < size_of_board && y < size_of_board) {
+                        if(board[x][y] == 0) {
+                            flag = 1;
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    if(flag == 0) {
+        return 1;
+    }
+    return 0;
 }
 
+// 动态深度：根据局面复杂度调整
+int ChessBoard::getDynamicDepth() {
+    int totalPieces = 0;
+    int emptySpaces = 0;
+
+    for(int i = 0; i < size_of_board; i++) {
+        for(int j = 0; j < size_of_board; j++) {
+            if(board[i][j] == 1 || board[i][j] == 2) totalPieces++;
+            if(board[i][j] == 0) emptySpaces++;
+        }
+    }
+
+    // 残局搜索更深
+    if(emptySpaces < 30) return 4;
+    if(emptySpaces < 50) return 3;
+    return 2;
+}
+
+int ChessBoard::calculateTerritory(int x, int y, int player) {
+    // 计算从该棋子出发，3步内能到达的空格数
+    bool visited[10][10] = {false};
+    std::queue<std::tuple<int, int, int>> q; // x, y, depth
+    q.push({x, y, 0});
+    visited[x][y] = true;
+
+    int territory = 0;
+    const int dx[] = {-1,-1,-1,0,0,1,1,1};
+    const int dy[] = {-1,0,1,-1,1,-1,0,1};
+    const int MAX_DEPTH = 3;
+
+    while(!q.empty()) {
+        auto [cx, cy, depth] = q.front();
+        q.pop();
+
+        if(depth >= MAX_DEPTH) continue;
+
+        for(int d = 0; d < 8; d++) {
+            int nx = cx + dx[d];
+            int ny = cy + dy[d];
+
+            if(nx >= 0 && nx < size_of_board &&
+                ny >= 0 && ny < size_of_board &&
+                !visited[nx][ny] && board[nx][ny] == 0) {
+                visited[nx][ny] = true;
+                territory++;
+                q.push({nx, ny, depth + 1});
+            }
+        }
+    }
+
+    return territory;
+}
+
+int ChessBoard::positionValue(int x, int y) {
+    // 中心位置更有价值
+    int cx = size_of_board / 2;
+    int cy = size_of_board / 2;
+    int distToCenter = abs(x - cx) + abs(y - cy);
+
+    // 距离中心越近，分数越高
+    return (size_of_board - distToCenter) * 2;
+}
+
+int ChessBoard::distanceToNearestAlly(int x, int y, int player) {
+    int minDist = 999;
+
+    for(int i = 0; i < size_of_board; i++) {
+        for(int j = 0; j < size_of_board; j++) {
+            if(board[i][j] == player && !(i == x && j == y)) {
+                int dist = abs(i - x) + abs(j - y);
+                minDist = std::min(minDist, dist);
+            }
+        }
+    }
+
+    return minDist;
+}
+
+int ChessBoard::advancedEvaluate(int player) {
+    int score = 0;
+    int opponent = 3 - player;
+
+    // 1. 移动性评估（加权）
+    int myMobility = 0, oppMobility = 0;
+
+    // 2. 领地控制（可达区域）
+    int myTerritory = 0, oppTerritory = 0;
+
+    // 3. 棋子间距离（分散 vs 集中）
+    int myCompactness = 0, oppCompactness = 0;
+
+    for(int i = 0; i < size_of_board; i++) {
+        for(int j = 0; j < size_of_board; j++) {
+            if(board[i][j] == player) {
+                // 移动性
+                int mobility = localMobility(i, j);
+                myMobility += mobility;
+
+                // 领地（BFS/DFS可达区域）
+                myTerritory += calculateTerritory(i, j, player);
+
+                // 位置价值（中心 > 边缘）
+                score += positionValue(i, j);
+
+                // 与队友距离（不要太分散）
+                myCompactness += distanceToNearestAlly(i, j, player);
+
+            } else if(board[i][j] == opponent) {
+                oppMobility += localMobility(i, j);
+                oppTerritory += calculateTerritory(i, j, opponent);
+                score -= positionValue(i, j);
+                oppCompactness += distanceToNearestAlly(i, j, opponent);
+            }
+        }
+    }
+
+    // 加权组合
+    score += 50 * (myMobility - oppMobility);        // 移动性权重最高
+    score += 30 * (myTerritory - oppTerritory);      // 领地控制
+    score += 10 * (oppCompactness - myCompactness);  // 对手分散更好
+
+    // 如果对手无路可走，给极高分
+    if(oppMobility == 0) {
+        score += 100000;
+    }
+
+    // 如果己方无路可走，给极低分
+    if(myMobility == 0) {
+        score -= 100000;
+    }
+
+    return score;
+}
