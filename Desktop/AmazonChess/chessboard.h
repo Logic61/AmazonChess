@@ -48,6 +48,7 @@ public:
     int distanceToNearestAlly(int x, int y, int player);
     int advancedEvaluate(int player);
     int getAggressiveness(int x, int y, int opponent);
+    std::pair<int,int> calculateTerritoriesGlobal();
     /*
     // Zobrist & TT
     void initZobrist();
