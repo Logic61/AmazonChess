@@ -1,0 +1,44 @@
+/* 整体背景 */
+QWidget {
+    background: #f3f4f7;
+    font-family: "Microsoft YaHei UI";
+}
+
+/* 卡片面板 */
+#rightPanel {
+    background: #ffffff;
+    border-radius: 22px;
+    padding: 25px;
+    border: 1px solid #e5e5e5;
+}
+
+/* 标题（当前玩家） */
+#currentPlayerLabel {
+    font-size: 22px;
+    font-weight: bold;
+    color: #2b59ff;
+}
+
+/* 按钮 */
+QPushButton {
+    background: #4A90E2;
+    color: white;
+    font-size: 20px;
+    border-radius: 25px;
+}
+
+
+QPushButton:hover {
+    background: #f0f2f5;
+}
+
+QPushButton:pressed {
+    background: #dcdfe3;
+}
+
+/* 棋盘外框 */
+#boardFrame {
+    border: 4px solid #2c2c2c;
+    border-radius: 12px;
+    box-shadow: 0 6px 20px rgba(0,0,0,0.25);
+}
